@@ -13,166 +13,53 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1>Agro Control</h1>
-      <p>Gestión de clientes, trabajos y cobros</p>
+<header class="topbar"><div><h1>Agro Control</h1><p>Gestión de clientes, trabajos y cobros</p></div><button id="installBtn" class="ghost hidden">Instalar</button></header>
+<main id="app">
+<section id="inicio" class="view active">
+  <div class="grid metrics">
+    <article class="card metric"><span>Facturado</span><strong id="metricBilled">0,00 €</strong></article>
+    <article class="card metric"><span>Cobrado</span><strong id="metricCollected">0,00 €</strong></article>
+    <article class="card metric"><span>Pendiente</span><strong id="metricPending">0,00 €</strong></article>
+    <article class="card metric"><span>Horas</span><strong id="metricHours">0</strong></article>
+  </div>
+  <article class="card"><div class="section-title"><h2>Últimos trabajos</h2><button class="link-btn" data-go="trabajos">Ver todos</button></div><div id="recentJobs" class="list empty-state">Todavía no hay trabajos.</div></article>
+</section>
+<section id="clientes" class="view">
+  <div class="section-title"><h2>Clientes</h2><button class="primary" id="newClientBtn">+ Nuevo cliente</button></div>
+  <input id="clientSearch" class="search" placeholder="Buscar por nombre, código o teléfono">
+  <div id="clientList" class="list"></div>
+</section>
+<section id="trabajos" class="view">
+  <div class="section-title"><h2>Trabajos</h2><button class="primary" id="newJobBtn">+ Nuevo trabajo</button></div>
+  <div class="filters"><input id="jobSearch" class="search" placeholder="Buscar cliente, finca o servicio"><select id="jobFilter"><option value="all">Todos</option><option value="paid">Cobrados</option><option value="pending">Pendientes</option></select></div>
+  <div id="jobList" class="list"></div>
+</section>
+<section id="resumen" class="view">
+  <h2>Resumen</h2>
+  <div class="grid metrics"><article class="card metric"><span>Trabajos</span><strong id="sumJobs">0</strong></article><article class="card metric"><span>Clientes</span><strong id="sumClients">0</strong></article><article class="card metric"><span>Facturado</span><strong id="sumBilled">0,00 €</strong></article><article class="card metric"><span>Pendiente</span><strong id="sumPending">0,00 €</strong></article></div>
+  <article class="card"><h3>Resumen mensual</h3><div id="monthlySummary" class="summary-table"></div></article>
+  <article class="card"><h3>Facturación por cliente</h3><div id="clientSummary" class="summary-table"></div></article>
+</section>
+<section id="ajustes" class="view">
+  <h2>Ajustes</h2>
+  <article class="card"><label>Nombre de la empresa<input id="businessName" placeholder="Agro Control"></label><label>Precio por hora general<input id="defaultRate" type="number" inputmode="decimal" step="0.01" min="0"></label><button class="primary full" id="saveSettingsBtn">Guardar ajustes</button></article>
+  <article class="card"><div class="section-title"><h3>Servicios y precios</h3><button class="primary" id="newServiceBtn">+ Servicio</button></div><p class="help">El precio se pondrá automáticamente al elegir el servicio.</p><div id="serviceList" class="summary-table"></div></article>
+  <article class="card"><h3>Exportar trabajos</h3>
+    <div class="form-grid export-grid">
+      <label>Cliente<select id="exportClient"><option value="all">Todos los clientes</option></select></label>
+      <label>Servicio<select id="exportService"><option value="all">Todos los servicios</option></select></label>
+      <label>Desde<input id="exportFrom" type="date"></label><label>Hasta<input id="exportTo" type="date"></label>
+      <label>Estado<select id="exportStatus"><option value="all">Todos</option><option value="paid">Cobrados</option><option value="pending">Pendientes</option></select></label>
     </div>
-    <button id="installBtn" class="ghost hidden">Instalar</button>
-  </header>
-
-  <main id="app">
-    <section id="inicio" class="view active">
-      <div class="grid metrics">
-        <article class="card metric"><span>Facturado</span><strong id="metricBilled">0,00 €</strong></article>
-        <article class="card metric"><span>Cobrado</span><strong id="metricCollected">0,00 €</strong></article>
-        <article class="card metric"><span>Pendiente</span><strong id="metricPending">0,00 €</strong></article>
-        <article class="card metric"><span>Horas</span><strong id="metricHours">0</strong></article>
-      </div>
-
-      <article class="card">
-        <div class="section-title">
-          <h2>Últimos trabajos</h2>
-          <button class="link-btn" data-go="trabajos">Ver todos</button>
-        </div>
-        <div id="recentJobs" class="list empty-state">Todavía no hay trabajos.</div>
-      </article>
-    </section>
-
-    <section id="clientes" class="view">
-      <div class="section-title">
-        <h2>Clientes</h2>
-        <button class="primary" id="newClientBtn">+ Nuevo cliente</button>
-      </div>
-      <input id="clientSearch" class="search" placeholder="Buscar por nombre, código o teléfono">
-      <div id="clientList" class="list"></div>
-    </section>
-
-    <section id="trabajos" class="view">
-      <div class="section-title">
-        <h2>Trabajos</h2>
-        <button class="primary" id="newJobBtn">+ Nuevo trabajo</button>
-      </div>
-      <div class="filters">
-        <input id="jobSearch" class="search" placeholder="Buscar cliente, finca o servicio">
-        <select id="jobFilter">
-          <option value="all">Todos</option>
-          <option value="paid">Cobrados</option>
-          <option value="pending">Pendientes</option>
-        </select>
-      </div>
-      <div id="jobList" class="list"></div>
-    </section>
-
-    <section id="resumen" class="view">
-      <h2>Resumen</h2>
-      <div class="grid metrics">
-        <article class="card metric"><span>Trabajos</span><strong id="sumJobs">0</strong></article>
-        <article class="card metric"><span>Clientes</span><strong id="sumClients">0</strong></article>
-        <article class="card metric"><span>Facturado</span><strong id="sumBilled">0,00 €</strong></article>
-        <article class="card metric"><span>Pendiente</span><strong id="sumPending">0,00 €</strong></article>
-      </div>
-
-      <article class="card">
-        <h3>Resumen mensual</h3>
-        <div id="monthlySummary" class="summary-table"></div>
-      </article>
-
-      <article class="card">
-        <h3>Facturación por cliente</h3>
-        <div id="clientSummary" class="summary-table"></div>
-      </article>
-    </section>
-
-    <section id="ajustes" class="view">
-      <h2>Ajustes</h2>
-      <article class="card">
-        <label>Nombre de la empresa
-          <input id="businessName" placeholder="Agro Control">
-        </label>
-        <label>Precio por hora por defecto
-          <input id="defaultRate" type="number" inputmode="decimal" step="0.01" min="0">
-        </label>
-        <button class="primary full" id="saveSettingsBtn">Guardar ajustes</button>
-      </article>
-
-      <article class="card">
-        <h3>Copias y exportación</h3>
-        <button class="secondary full" id="exportCsvBtn">Exportar trabajos a CSV</button>
-        <button class="secondary full" id="backupBtn">Descargar copia de seguridad</button>
-        <label class="file-label">Restaurar copia
-          <input id="restoreInput" type="file" accept="application/json">
-        </label>
-      </article>
-    </section>
-  </main>
-
-  <button id="quickAdd" class="fab" aria-label="Nuevo trabajo">+</button>
-
-  <nav class="bottom-nav">
-    <button class="nav-btn active" data-view="inicio">⌂<span>Inicio</span></button>
-    <button class="nav-btn" data-view="clientes">♙<span>Clientes</span></button>
-    <button class="nav-btn" data-view="trabajos">🚜<span>Trabajos</span></button>
-    <button class="nav-btn" data-view="resumen">▥<span>Resumen</span></button>
-    <button class="nav-btn" data-view="ajustes">⚙<span>Ajustes</span></button>
-  </nav>
-
-  <dialog id="clientDialog">
-    <form method="dialog" id="clientForm">
-      <div class="dialog-head">
-        <h2 id="clientDialogTitle">Nuevo cliente</h2>
-        <button value="cancel" class="icon-btn">✕</button>
-      </div>
-      <input type="hidden" id="clientId">
-      <div class="form-grid">
-        <label>Código<input id="clientCode" required></label>
-        <label>Nombre o razón social<input id="clientName" required></label>
-        <label>Teléfono<input id="clientPhone" inputmode="tel"></label>
-        <label>Email<input id="clientEmail" type="email"></label>
-        <label class="span-2">Dirección<input id="clientAddress"></label>
-        <label>NIF/CIF<input id="clientTaxId"></label>
-        <label class="span-2">Observaciones<textarea id="clientNotes"></textarea></label>
-      </div>
-      <div class="dialog-actions">
-        <button type="button" class="danger hidden" id="deleteClientBtn">Eliminar</button>
-        <button value="cancel" class="secondary">Cancelar</button>
-        <button type="submit" class="primary">Guardar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="jobDialog">
-    <form method="dialog" id="jobForm">
-      <div class="dialog-head">
-        <h2 id="jobDialogTitle">Nuevo trabajo</h2>
-        <button value="cancel" class="icon-btn">✕</button>
-      </div>
-      <input type="hidden" id="jobId">
-      <div class="form-grid">
-        <label>Fecha<input id="jobDate" type="date" required></label>
-        <label>Cliente<select id="jobClient" required></select></label>
-        <label>Parcela o finca<input id="jobFarm" required></label>
-        <label>Tipo de servicio<input id="jobService" required></label>
-        <label>Horas trabajadas<input id="jobHours" type="number" inputmode="decimal" step="0.01" min="0" required></label>
-        <label>Precio por hora<input id="jobRate" type="number" inputmode="decimal" step="0.01" min="0" required></label>
-        <label>Total automático<input id="jobTotal" readonly></label>
-        <label>Estado
-          <select id="jobPaid">
-            <option value="no">Pendiente</option>
-            <option value="yes">Cobrado</option>
-          </select>
-        </label>
-        <label id="paymentDateWrap" class="hidden">Fecha de cobro<input id="jobPaymentDate" type="date"></label>
-        <label class="span-2">Observaciones<textarea id="jobNotes"></textarea></label>
-      </div>
-      <div class="dialog-actions">
-        <button type="button" class="danger hidden" id="deleteJobBtn">Eliminar</button>
-        <button value="cancel" class="secondary">Cancelar</button>
-        <button type="submit" class="primary">Guardar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="app.js"></script>
-</body>
-</html>
+    <button class="secondary full" id="exportExcelBtn">Exportar a Excel</button><button class="secondary full" id="exportCsvBtn">Exportar a CSV</button>
+  </article>
+  <article class="card"><h3>Copias de seguridad</h3><button class="secondary full" id="backupBtn">Descargar copia de seguridad</button><label class="file-label">Restaurar copia<input id="restoreInput" type="file" accept="application/json"></label></article>
+</section>
+</main>
+<button id="quickAdd" class="fab" aria-label="Nuevo trabajo">+</button>
+<nav class="bottom-nav"><button class="nav-btn active" data-view="inicio">⌂<span>Inicio</span></button><button class="nav-btn" data-view="clientes">♙<span>Clientes</span></button><button class="nav-btn" data-view="trabajos">🚜<span>Trabajos</span></button><button class="nav-btn" data-view="resumen">▥<span>Resumen</span></button><button class="nav-btn" data-view="ajustes">⚙<span>Ajustes</span></button></nav>
+<dialog id="clientDialog"><form method="dialog" id="clientForm"><div class="dialog-head"><h2 id="clientDialogTitle">Nuevo cliente</h2><button value="cancel" class="icon-btn">✕</button></div><input type="hidden" id="clientId"><div class="form-grid"><label>Código<input id="clientCode" required></label><label>Nombre o referencia<input id="clientName" required></label><label>Teléfono (opcional)<input id="clientPhone" inputmode="tel"></label><label>Email (opcional)<input id="clientEmail" type="email"></label><label class="span-2">Dirección (opcional)<input id="clientAddress"></label><label>NIF/CIF (opcional)<input id="clientTaxId"></label><label class="span-2">Observaciones<textarea id="clientNotes"></textarea></label></div><div class="dialog-actions"><button type="button" class="danger hidden" id="deleteClientBtn">Eliminar</button><button value="cancel" class="secondary">Cancelar</button><button type="submit" class="primary">Guardar</button></div></form></dialog>
+<dialog id="jobDialog"><form method="dialog" id="jobForm"><div class="dialog-head"><h2 id="jobDialogTitle">Nuevo trabajo</h2><button value="cancel" class="icon-btn">✕</button></div><input type="hidden" id="jobId"><div class="form-grid"><label>Fecha<input id="jobDate" type="date" required></label><label>Cliente<select id="jobClient" required></select></label><label>Parcela o finca<input id="jobFarm" required></label><label>Tipo de servicio<select id="jobService" required></select></label><label>Horas trabajadas<input id="jobHours" type="number" inputmode="decimal" step="0.01" min="0" required></label><label>Precio por hora<input id="jobRate" type="number" inputmode="decimal" step="0.01" min="0" required></label><label>Total automático<input id="jobTotal" readonly></label><label>Estado<select id="jobPaid"><option value="no">Pendiente</option><option value="yes">Cobrado</option></select></label><label id="paymentDateWrap" class="hidden">Fecha de cobro<input id="jobPaymentDate" type="date"></label><label class="span-2">Observaciones<textarea id="jobNotes"></textarea></label></div><div class="dialog-actions"><button type="button" class="danger hidden" id="deleteJobBtn">Eliminar</button><button value="cancel" class="secondary">Cancelar</button><button type="submit" class="primary">Guardar</button></div></form></dialog>
+<dialog id="serviceDialog"><form method="dialog" id="serviceForm"><div class="dialog-head"><h2 id="serviceDialogTitle">Nuevo servicio</h2><button value="cancel" class="icon-btn">✕</button></div><input type="hidden" id="serviceId"><div class="form-grid"><label>Nombre del servicio<input id="serviceName" required></label><label>Precio por hora<input id="serviceRate" type="number" inputmode="decimal" step="0.01" min="0" required></label></div><div class="dialog-actions"><button type="button" class="danger hidden" id="deleteServiceBtn">Eliminar</button><button value="cancel" class="secondary">Cancelar</button><button type="submit" class="primary">Guardar</button></div></form></dialog>
+<script src="app.js"></script>
+</body></html>

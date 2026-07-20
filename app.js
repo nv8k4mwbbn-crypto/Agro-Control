@@ -1,309 +1,44 @@
-const STORAGE_KEY = "agroControlDataV1";
-const euro = new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
-const monthFmt = new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"});
-
-let deferredPrompt = null;
-let state = loadState();
-
-function defaultState(){
-  return {
-    settings:{businessName:"Agro Control",defaultRate:0},
-    clients:[],
-    jobs:[]
-  };
-}
-
-function loadState(){
-  try{
-    return {...defaultState(),...JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}")};
-  }catch{
-    return defaultState();
-  }
-}
-
-function saveState(){
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  renderAll();
-}
-
-function uid(){ return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2); }
-function today(){ return new Date().toISOString().slice(0,10); }
-function money(n){ return euro.format(Number(n)||0); }
-function total(job){ return (Number(job.hours)||0)*(Number(job.rate)||0); }
-function clientById(id){ return state.clients.find(c=>c.id===id); }
-function escapeHtml(s=""){ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
-
-function nextClientCode(){
-  const max = state.clients.reduce((m,c)=>{
-    const n = parseInt((c.code||"").replace(/\D/g,""),10);
-    return Number.isFinite(n)?Math.max(m,n):m;
-  },0);
-  return `C${String(max+1).padStart(3,"0")}`;
-}
-
-function renderAll(){
-  renderMetrics();
-  renderClients();
-  renderJobs();
-  renderSummaries();
-  fillClientSelect();
-  document.getElementById("businessName").value=state.settings.businessName||"Agro Control";
-  document.getElementById("defaultRate").value=state.settings.defaultRate||0;
-  document.querySelector(".topbar h1").textContent=state.settings.businessName||"Agro Control";
-}
-
-function renderMetrics(){
-  const billed = state.jobs.reduce((s,j)=>s+total(j),0);
-  const collected = state.jobs.filter(j=>j.paid).reduce((s,j)=>s+total(j),0);
-  const pending = billed-collected;
-  const hours = state.jobs.reduce((s,j)=>s+(Number(j.hours)||0),0);
-  metricBilled.textContent=money(billed);
-  metricCollected.textContent=money(collected);
-  metricPending.textContent=money(pending);
-  metricHours.textContent=hours.toLocaleString("es-ES",{maximumFractionDigits:2});
-
-  const recent=[...state.jobs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
-  recentJobs.innerHTML=recent.length?recent.map(jobCard).join(""):'<div class="empty-state">Todavía no hay trabajos.</div>';
-}
-
-function renderClients(){
-  const q=clientSearch.value.trim().toLowerCase();
-  const list=state.clients
-    .filter(c=>[c.name,c.code,c.phone].some(v=>(v||"").toLowerCase().includes(q)))
-    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
-  clientList.innerHTML=list.length?list.map(c=>{
-    const jobs=state.jobs.filter(j=>j.clientId===c.id);
-    const billed=jobs.reduce((s,j)=>s+total(j),0);
-    const pending=jobs.filter(j=>!j.paid).reduce((s,j)=>s+total(j),0);
-    return `<button class="list-item" onclick="editClient('${c.id}')">
-      <div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.code)} · ${escapeHtml(c.phone||"Sin teléfono")}</p><p>${jobs.length} trabajos</p></div>
-      <div class="amount">${money(billed)}<p>Pendiente ${money(pending)}</p></div>
-    </button>`;
-  }).join(""):'<div class="empty-state">No hay clientes.</div>';
-}
-
-function jobCard(j){
-  const c=clientById(j.clientId);
-  return `<button class="list-item" onclick="editJob('${j.id}')">
-    <div><h3>${escapeHtml(c?.name||"Sin cliente")}</h3><p>${escapeHtml(j.service)} · ${escapeHtml(j.farm)}</p><p>${escapeHtml(j.date)}</p><span class="badge ${j.paid?"paid":"pending"}">${j.paid?"Cobrado":"Pendiente"}</span></div>
-    <div class="amount">${money(total(j))}</div>
-  </button>`;
-}
-
-function renderJobs(){
-  const q=jobSearch.value.trim().toLowerCase();
-  const f=jobFilter.value;
-  const list=[...state.jobs]
-    .filter(j=>{
-      const c=clientById(j.clientId);
-      const text=[c?.name,j.farm,j.service].some(v=>(v||"").toLowerCase().includes(q));
-      const paid=f==="all"||(f==="paid"&&j.paid)||(f==="pending"&&!j.paid);
-      return text&&paid;
-    })
-    .sort((a,b)=>b.date.localeCompare(a.date));
-  jobList.innerHTML=list.length?list.map(jobCard).join(""):'<div class="empty-state">No hay trabajos.</div>';
-}
-
-function renderSummaries(){
-  const billed=state.jobs.reduce((s,j)=>s+total(j),0);
-  const pending=state.jobs.filter(j=>!j.paid).reduce((s,j)=>s+total(j),0);
-  sumJobs.textContent=state.jobs.length;
-  sumClients.textContent=state.clients.length;
-  sumBilled.textContent=money(billed);
-  sumPending.textContent=money(pending);
-
-  const monthly={};
-  state.jobs.forEach(j=>{
-    const key=j.date.slice(0,7);
-    monthly[key]=(monthly[key]||0)+total(j);
-  });
-  monthlySummary.innerHTML=Object.keys(monthly).sort().reverse().slice(0,12).map(k=>{
-    const d=new Date(k+"-01T12:00:00");
-    return `<div class="summary-row"><span>${monthFmt.format(d)}</span><strong>${money(monthly[k])}</strong></div>`;
-  }).join("")||'<div class="empty-state">Sin datos.</div>';
-
-  clientSummary.innerHTML=state.clients.map(c=>{
-    const jobs=state.jobs.filter(j=>j.clientId===c.id);
-    const value=jobs.reduce((s,j)=>s+total(j),0);
-    return {name:c.name,value};
-  }).sort((a,b)=>b.value-a.value).map(x=>
-    `<div class="summary-row"><span>${escapeHtml(x.name)}</span><strong>${money(x.value)}</strong></div>`
-  ).join("")||'<div class="empty-state">Sin datos.</div>';
-}
-
-function fillClientSelect(){
-  const current=jobClient.value;
-  jobClient.innerHTML='<option value="">Selecciona un cliente</option>'+
-    state.clients.sort((a,b)=>a.name.localeCompare(b.name,"es"))
-      .map(c=>`<option value="${c.id}">${escapeHtml(c.code)} · ${escapeHtml(c.name)}</option>`).join("");
-  jobClient.value=current;
-}
-
-function openClient(id=null){
-  clientForm.reset();
-  clientId.value="";
-  clientDialogTitle.textContent=id?"Editar cliente":"Nuevo cliente";
-  deleteClientBtn.classList.toggle("hidden",!id);
-  if(id){
-    const c=state.clients.find(c=>c.id===id);
-    if(!c)return;
-    clientId.value=c.id; clientCode.value=c.code; clientName.value=c.name;
-    clientPhone.value=c.phone||""; clientEmail.value=c.email||"";
-    clientAddress.value=c.address||""; clientTaxId.value=c.taxId||""; clientNotes.value=c.notes||"";
-  }else{
-    clientCode.value=nextClientCode();
-  }
-  clientDialog.showModal();
-}
-
-window.editClient=openClient;
-
-clientForm.addEventListener("submit",e=>{
-  e.preventDefault();
-  const data={
-    id:clientId.value||uid(), code:clientCode.value.trim().toUpperCase(),
-    name:clientName.value.trim(), phone:clientPhone.value.trim(),
-    email:clientEmail.value.trim(), address:clientAddress.value.trim(),
-    taxId:clientTaxId.value.trim().toUpperCase(), notes:clientNotes.value.trim()
-  };
-  if(!data.name||!data.code)return;
-  const duplicate=state.clients.some(c=>c.code===data.code&&c.id!==data.id);
-  if(duplicate){ alert("Ese código de cliente ya existe."); return; }
-  const i=state.clients.findIndex(c=>c.id===data.id);
-  if(i>=0)state.clients[i]=data; else state.clients.push(data);
-  clientDialog.close(); saveState();
-});
-
-deleteClientBtn.addEventListener("click",()=>{
-  const id=clientId.value;
-  if(state.jobs.some(j=>j.clientId===id)){
-    alert("No se puede eliminar este cliente porque tiene trabajos asociados.");
-    return;
-  }
-  if(confirm("¿Eliminar este cliente?")){
-    state.clients=state.clients.filter(c=>c.id!==id); clientDialog.close(); saveState();
-  }
-});
-
-function openJob(id=null){
-  if(!state.clients.length){
-    alert("Primero debes crear al menos un cliente.");
-    showView("clientes");
-    return;
-  }
-  jobForm.reset(); jobId.value="";
-  jobDialogTitle.textContent=id?"Editar trabajo":"Nuevo trabajo";
-  deleteJobBtn.classList.toggle("hidden",!id);
-  jobDate.value=today();
-  jobRate.value=state.settings.defaultRate||0;
-  if(id){
-    const j=state.jobs.find(j=>j.id===id); if(!j)return;
-    jobId.value=j.id; jobDate.value=j.date; jobClient.value=j.clientId; jobFarm.value=j.farm;
-    jobService.value=j.service; jobHours.value=j.hours; jobRate.value=j.rate;
-    jobPaid.value=j.paid?"yes":"no"; jobPaymentDate.value=j.paymentDate||"";
-    jobNotes.value=j.notes||"";
-  }
-  updatePaymentVisibility(); updateJobTotal(); jobDialog.showModal();
-}
-
-window.editJob=openJob;
-
-function updateJobTotal(){ jobTotal.value=money((Number(jobHours.value)||0)*(Number(jobRate.value)||0)); }
-function updatePaymentVisibility(){ paymentDateWrap.classList.toggle("hidden",jobPaid.value!=="yes"); }
-
-jobHours.addEventListener("input",updateJobTotal);
-jobRate.addEventListener("input",updateJobTotal);
-jobPaid.addEventListener("change",updatePaymentVisibility);
-
-jobForm.addEventListener("submit",e=>{
-  e.preventDefault();
-  const data={
-    id:jobId.value||uid(), date:jobDate.value, clientId:jobClient.value,
-    farm:jobFarm.value.trim(), service:jobService.value.trim(),
-    hours:Number(jobHours.value)||0, rate:Number(jobRate.value)||0,
-    paid:jobPaid.value==="yes", paymentDate:jobPaid.value==="yes"?(jobPaymentDate.value||today()):"",
-    notes:jobNotes.value.trim()
-  };
-  if(!data.clientId||!data.date||!data.farm||!data.service)return;
-  const i=state.jobs.findIndex(j=>j.id===data.id);
-  if(i>=0)state.jobs[i]=data; else state.jobs.push(data);
-  jobDialog.close(); saveState();
-});
-
-deleteJobBtn.addEventListener("click",()=>{
-  if(confirm("¿Eliminar este trabajo?")){
-    state.jobs=state.jobs.filter(j=>j.id!==jobId.value); jobDialog.close(); saveState();
-  }
-});
-
-function showView(id){
-  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
-  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.view===id));
-  window.scrollTo({top:0,behavior:"smooth"});
-}
-
-document.querySelectorAll(".nav-btn").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
-document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.go)));
-newClientBtn.addEventListener("click",()=>openClient());
-newJobBtn.addEventListener("click",()=>openJob());
-quickAdd.addEventListener("click",()=>openJob());
-clientSearch.addEventListener("input",renderClients);
-jobSearch.addEventListener("input",renderJobs);
-jobFilter.addEventListener("change",renderJobs);
-
-saveSettingsBtn.addEventListener("click",()=>{
-  state.settings.businessName=businessName.value.trim()||"Agro Control";
-  state.settings.defaultRate=Number(defaultRate.value)||0;
-  saveState();
-  alert("Ajustes guardados.");
-});
-
-function downloadFile(name,content,type){
-  const blob=new Blob([content],{type});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download=name; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-
-exportCsvBtn.addEventListener("click",()=>{
-  const rows=[["Fecha","Código cliente","Cliente","Parcela o finca","Servicio","Horas","Precio por hora","Total","Cobrado","Fecha de cobro","Observaciones"]];
-  state.jobs.forEach(j=>{
-    const c=clientById(j.clientId);
-    rows.push([j.date,c?.code||"",c?.name||"",j.farm,j.service,j.hours,j.rate,total(j),j.paid?"Sí":"No",j.paymentDate||"",j.notes||""]);
-  });
-  const csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");
-  downloadFile("AgroControl_Trabajos.csv",csv,"text/csv;charset=utf-8");
-});
-
-backupBtn.addEventListener("click",()=>{
-  downloadFile("AgroControl_Copia.json",JSON.stringify(state,null,2),"application/json");
-});
-
-restoreInput.addEventListener("change",async()=>{
-  const file=restoreInput.files[0]; if(!file)return;
-  try{
-    const data=JSON.parse(await file.text());
-    if(!data.clients||!data.jobs)throw new Error();
-    if(confirm("Esto sustituirá los datos actuales. ¿Continuar?")){
-      state={...defaultState(),...data}; saveState();
-    }
-  }catch{ alert("La copia no es válida."); }
-  restoreInput.value="";
-});
-
-window.addEventListener("beforeinstallprompt",e=>{
-  e.preventDefault(); deferredPrompt=e; installBtn.classList.remove("hidden");
-});
-installBtn.addEventListener("click",async()=>{
-  if(!deferredPrompt){
-    alert('En iPhone: abre el menú Compartir de Safari y pulsa "Añadir a pantalla de inicio".');
-    return;
-  }
-  deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null;
-});
-
-if("serviceWorker" in navigator){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js"));
-}
-
-renderAll();
+const STORAGE_KEY="agroControlDataV1";
+const euro=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+const monthFmt=new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"});
+let deferredPrompt=null;let state=loadState();
+function defaultState(){return{settings:{businessName:"Agro Control",defaultRate:0},clients:[],jobs:[],services:[]}}
+function loadState(){try{const raw=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}");return{...defaultState(),...raw,settings:{...defaultState().settings,...(raw.settings||{})},services:Array.isArray(raw.services)?raw.services:[]}}catch{return defaultState()}}
+function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
+function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)}
+function today(){return new Date().toISOString().slice(0,10)}
+function money(n){return euro.format(Number(n)||0)}
+function total(j){return(Number(j.hours)||0)*(Number(j.rate)||0)}
+function clientById(id){return state.clients.find(c=>c.id===id)}
+function escapeHtml(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]))}
+function nextClientCode(){const max=state.clients.reduce((m,c)=>{const n=parseInt((c.code||"").replace(/\D/g,""),10);return Number.isFinite(n)?Math.max(m,n):m},0);return`C${String(max+1).padStart(3,"0")}`}
+function renderAll(){renderMetrics();renderClients();renderJobs();renderSummaries();renderServices();fillClientSelects();fillServiceSelects();businessName.value=state.settings.businessName||"Agro Control";defaultRate.value=state.settings.defaultRate||0;document.querySelector(".topbar h1").textContent=state.settings.businessName||"Agro Control"}
+function renderMetrics(){const billed=state.jobs.reduce((s,j)=>s+total(j),0),collected=state.jobs.filter(j=>j.paid).reduce((s,j)=>s+total(j),0),hours=state.jobs.reduce((s,j)=>s+(Number(j.hours)||0),0);metricBilled.textContent=money(billed);metricCollected.textContent=money(collected);metricPending.textContent=money(billed-collected);metricHours.textContent=hours.toLocaleString("es-ES",{maximumFractionDigits:2});const recent=[...state.jobs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);recentJobs.innerHTML=recent.length?recent.map(jobCard).join(""):'<div class="empty-state">Todavía no hay trabajos.</div>'}
+function renderClients(){const q=clientSearch.value.trim().toLowerCase();const list=state.clients.filter(c=>[c.name,c.code,c.phone].some(v=>(v||"").toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name,"es"));clientList.innerHTML=list.length?list.map(c=>{const jobs=state.jobs.filter(j=>j.clientId===c.id),billed=jobs.reduce((s,j)=>s+total(j),0),pending=jobs.filter(j=>!j.paid).reduce((s,j)=>s+total(j),0);return`<button class="list-item" onclick="editClient('${c.id}')"><div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.code)} · ${escapeHtml(c.phone||"Sin teléfono")}</p><p>${jobs.length} trabajos</p></div><div class="amount">${money(billed)}<p>Pendiente ${money(pending)}</p></div></button>`}).join(""):'<div class="empty-state">No hay clientes.</div>'}
+function jobCard(j){const c=clientById(j.clientId);return`<button class="list-item" onclick="editJob('${j.id}')"><div><h3>${escapeHtml(c?.name||"Sin cliente")}</h3><p>${escapeHtml(j.service)} · ${escapeHtml(j.farm)}</p><p>${escapeHtml(j.date)}</p><span class="badge ${j.paid?"paid":"pending"}">${j.paid?"Cobrado":"Pendiente"}</span></div><div class="amount">${money(total(j))}</div></button>`}
+function renderJobs(){const q=jobSearch.value.trim().toLowerCase(),f=jobFilter.value;const list=[...state.jobs].filter(j=>{const c=clientById(j.clientId),text=[c?.name,j.farm,j.service].some(v=>(v||"").toLowerCase().includes(q)),paid=f==="all"||(f==="paid"&&j.paid)||(f==="pending"&&!j.paid);return text&&paid}).sort((a,b)=>b.date.localeCompare(a.date));jobList.innerHTML=list.length?list.map(jobCard).join(""):'<div class="empty-state">No hay trabajos.</div>'}
+function renderSummaries(){const billed=state.jobs.reduce((s,j)=>s+total(j),0),pending=state.jobs.filter(j=>!j.paid).reduce((s,j)=>s+total(j),0);sumJobs.textContent=state.jobs.length;sumClients.textContent=state.clients.length;sumBilled.textContent=money(billed);sumPending.textContent=money(pending);const monthly={};state.jobs.forEach(j=>{const k=j.date.slice(0,7);monthly[k]=(monthly[k]||0)+total(j)});monthlySummary.innerHTML=Object.keys(monthly).sort().reverse().slice(0,12).map(k=>`<div class="summary-row"><span>${monthFmt.format(new Date(k+"-01T12:00:00"))}</span><strong>${money(monthly[k])}</strong></div>`).join("")||'<div class="empty-state">Sin datos.</div>';clientSummary.innerHTML=state.clients.map(c=>({name:c.name,value:state.jobs.filter(j=>j.clientId===c.id).reduce((s,j)=>s+total(j),0)})).sort((a,b)=>b.value-a.value).map(x=>`<div class="summary-row"><span>${escapeHtml(x.name)}</span><strong>${money(x.value)}</strong></div>`).join("")||'<div class="empty-state">Sin datos.</div>'}
+function renderServices(){serviceList.innerHTML=state.services.length?[...state.services].sort((a,b)=>a.name.localeCompare(b.name,"es")).map(s=>`<div class="summary-row"><span><strong>${escapeHtml(s.name)}</strong><br><small>${money(s.rate)} / hora</small></span><button class="secondary" onclick="editService('${s.id}')">Editar</button></div>`).join(""):'<div class="empty-state">Todavía no hay servicios. Añade el primero.</div>'}
+function fillClientSelects(){const options=[...state.clients].sort((a,b)=>a.name.localeCompare(b.name,"es")).map(c=>`<option value="${c.id}">${escapeHtml(c.code)} · ${escapeHtml(c.name)}</option>`).join("");const cur=jobClient.value;jobClient.innerHTML='<option value="">Selecciona un cliente</option>'+options;jobClient.value=cur;const exp=exportClient.value;exportClient.innerHTML='<option value="all">Todos los clientes</option>'+options;exportClient.value=exp||"all"}
+function fillServiceSelects(){const sorted=[...state.services].sort((a,b)=>a.name.localeCompare(b.name,"es"));const options=sorted.map(s=>`<option value="${s.id}">${escapeHtml(s.name)} · ${money(s.rate)}/h</option>`).join("");const cur=jobService.value;jobService.innerHTML='<option value="">Selecciona un servicio</option>'+options;jobService.value=cur;const exp=exportService.value;exportService.innerHTML='<option value="all">Todos los servicios</option>'+sorted.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");exportService.value=exp||"all"}
+function openClient(id=null){clientForm.reset();clientId.value="";clientDialogTitle.textContent=id?"Editar cliente":"Nuevo cliente";deleteClientBtn.classList.toggle("hidden",!id);if(id){const c=state.clients.find(c=>c.id===id);if(!c)return;clientId.value=c.id;clientCode.value=c.code;clientName.value=c.name;clientPhone.value=c.phone||"";clientEmail.value=c.email||"";clientAddress.value=c.address||"";clientTaxId.value=c.taxId||"";clientNotes.value=c.notes||""}else clientCode.value=nextClientCode();clientDialog.showModal()}window.editClient=openClient;
+clientForm.addEventListener("submit",e=>{e.preventDefault();const data={id:clientId.value||uid(),code:clientCode.value.trim().toUpperCase(),name:clientName.value.trim(),phone:clientPhone.value.trim(),email:clientEmail.value.trim(),address:clientAddress.value.trim(),taxId:clientTaxId.value.trim().toUpperCase(),notes:clientNotes.value.trim()};if(!data.name||!data.code)return;const duplicate=state.clients.some(c=>c.code===data.code&&c.id!==data.id);if(duplicate){alert("Ese código de cliente ya existe.");return}const i=state.clients.findIndex(c=>c.id===data.id);if(i>=0)state.clients[i]=data;else state.clients.push(data);clientDialog.close();saveState()});
+deleteClientBtn.addEventListener("click",()=>{const id=clientId.value;if(state.jobs.some(j=>j.clientId===id)){alert("No se puede eliminar este cliente porque tiene trabajos asociados.");return}if(confirm("¿Eliminar este cliente?")){state.clients=state.clients.filter(c=>c.id!==id);clientDialog.close();saveState()}});
+function openService(id=null){serviceForm.reset();serviceId.value="";serviceDialogTitle.textContent=id?"Editar servicio":"Nuevo servicio";deleteServiceBtn.classList.toggle("hidden",!id);if(id){const s=state.services.find(s=>s.id===id);if(!s)return;serviceId.value=s.id;serviceName.value=s.name;serviceRate.value=s.rate}else serviceRate.value=state.settings.defaultRate||0;serviceDialog.showModal()}window.editService=openService;
+serviceForm.addEventListener("submit",e=>{e.preventDefault();const data={id:serviceId.value||uid(),name:serviceName.value.trim(),rate:Number(serviceRate.value)||0};if(!data.name)return;const dup=state.services.some(s=>s.name.toLowerCase()===data.name.toLowerCase()&&s.id!==data.id);if(dup){alert("Ese servicio ya existe.");return}const i=state.services.findIndex(s=>s.id===data.id);if(i>=0)state.services[i]=data;else state.services.push(data);serviceDialog.close();saveState()});
+deleteServiceBtn.addEventListener("click",()=>{const id=serviceId.value,s=state.services.find(x=>x.id===id);if(state.jobs.some(j=>j.service===s?.name)){alert("No se puede eliminar porque ya hay trabajos con este servicio.");return}if(confirm("¿Eliminar este servicio?")){state.services=state.services.filter(x=>x.id!==id);serviceDialog.close();saveState()}});
+function openJob(id=null){if(!state.clients.length){alert("Primero debes crear al menos un cliente.");showView("clientes");return}if(!state.services.length){alert("Primero crea al menos un servicio en Ajustes.");showView("ajustes");return}jobForm.reset();jobId.value="";jobDialogTitle.textContent=id?"Editar trabajo":"Nuevo trabajo";deleteJobBtn.classList.toggle("hidden",!id);jobDate.value=today();jobRate.value=state.settings.defaultRate||0;if(id){const j=state.jobs.find(j=>j.id===id);if(!j)return;jobId.value=j.id;jobDate.value=j.date;jobClient.value=j.clientId;jobFarm.value=j.farm;const service=state.services.find(s=>s.name===j.service);jobService.value=service?.id||"";jobHours.value=j.hours;jobRate.value=j.rate;jobPaid.value=j.paid?"yes":"no";jobPaymentDate.value=j.paymentDate||"";jobNotes.value=j.notes||""}updatePaymentVisibility();updateJobTotal();jobDialog.showModal()}window.editJob=openJob;
+function updateJobTotal(){jobTotal.value=money((Number(jobHours.value)||0)*(Number(jobRate.value)||0))}function updatePaymentVisibility(){paymentDateWrap.classList.toggle("hidden",jobPaid.value!=="yes")}
+jobService.addEventListener("change",()=>{const s=state.services.find(s=>s.id===jobService.value);if(s)jobRate.value=s.rate;updateJobTotal()});jobHours.addEventListener("input",updateJobTotal);jobRate.addEventListener("input",updateJobTotal);jobPaid.addEventListener("change",updatePaymentVisibility);
+jobForm.addEventListener("submit",e=>{e.preventDefault();const s=state.services.find(s=>s.id===jobService.value);const data={id:jobId.value||uid(),date:jobDate.value,clientId:jobClient.value,farm:jobFarm.value.trim(),service:s?.name||"",hours:Number(jobHours.value)||0,rate:Number(jobRate.value)||0,paid:jobPaid.value==="yes",paymentDate:jobPaid.value==="yes"?(jobPaymentDate.value||today()):"",notes:jobNotes.value.trim()};if(!data.clientId||!data.date||!data.farm||!data.service)return;const i=state.jobs.findIndex(j=>j.id===data.id);if(i>=0)state.jobs[i]=data;else state.jobs.push(data);jobDialog.close();saveState()});
+deleteJobBtn.addEventListener("click",()=>{if(confirm("¿Eliminar este trabajo?")){state.jobs=state.jobs.filter(j=>j.id!==jobId.value);jobDialog.close();saveState()}});
+function showView(id){document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.view===id));window.scrollTo({top:0,behavior:"smooth"})}
+document.querySelectorAll(".nav-btn").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.go)));newClientBtn.addEventListener("click",()=>openClient());newServiceBtn.addEventListener("click",()=>openService());newJobBtn.addEventListener("click",()=>openJob());quickAdd.addEventListener("click",()=>openJob());clientSearch.addEventListener("input",renderClients);jobSearch.addEventListener("input",renderJobs);jobFilter.addEventListener("change",renderJobs);
+saveSettingsBtn.addEventListener("click",()=>{state.settings.businessName=businessName.value.trim()||"Agro Control";state.settings.defaultRate=Number(defaultRate.value)||0;saveState();alert("Ajustes guardados.")});
+function downloadFile(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function filteredExportJobs(){return [...state.jobs].filter(j=>{const clientOk=exportClient.value==="all"||j.clientId===exportClient.value,serviceOk=exportService.value==="all"||j.service===exportService.value,fromOk=!exportFrom.value||j.date>=exportFrom.value,toOk=!exportTo.value||j.date<=exportTo.value,statusOk=exportStatus.value==="all"||(exportStatus.value==="paid"&&j.paid)||(exportStatus.value==="pending"&&!j.paid);return clientOk&&serviceOk&&fromOk&&toOk&&statusOk}).sort((a,b)=>a.date.localeCompare(b.date))}
+function exportRows(){const rows=[["Fecha","Código cliente","Cliente","Parcela o finca","Servicio","Horas","Precio por hora","Total","Cobrado","Fecha de cobro","Observaciones"]];filteredExportJobs().forEach(j=>{const c=clientById(j.clientId);rows.push([j.date,c?.code||"",c?.name||"",j.farm,j.service,j.hours,j.rate,total(j),j.paid?"Sí":"No",j.paymentDate||"",j.notes||""])});return rows}
+exportCsvBtn.addEventListener("click",()=>{const rows=exportRows();if(rows.length===1){alert("No hay trabajos con esos filtros.");return}const csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");downloadFile("AgroControl_Trabajos.csv",csv,"text/csv;charset=utf-8")});
+exportExcelBtn.addEventListener("click",()=>{const rows=exportRows();if(rows.length===1){alert("No hay trabajos con esos filtros.");return}const html=`<html><head><meta charset="utf-8"></head><body><table border="1">${rows.map((r,i)=>`<tr>${r.map(v=>i===0?`<th>${escapeHtml(v)}</th>`:`<td>${escapeHtml(v)}</td>`).join("")}</tr>`).join("")}</table></body></html>`;downloadFile("AgroControl_Trabajos.xls","\ufeff"+html,"application/vnd.ms-excel")});
+backupBtn.addEventListener("click",()=>downloadFile("AgroControl_Copia.json",JSON.stringify(state,null,2),"application/json"));restoreInput.addEventListener("change",async()=>{const file=restoreInput.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!data.clients||!data.jobs)throw new Error();if(confirm("Esto sustituirá los datos actuales. ¿Continuar?")){state={...defaultState(),...data,settings:{...defaultState().settings,...(data.settings||{})},services:Array.isArray(data.services)?data.services:[]};saveState()}}catch{alert("La copia no es válida.")}restoreInput.value=""});
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;installBtn.classList.remove("hidden")});installBtn.addEventListener("click",async()=>{if(!deferredPrompt){alert('En iPhone: abre el menú Compartir de Safari y pulsa "Añadir a pantalla de inicio".');return}deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null});if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js"));renderAll();
